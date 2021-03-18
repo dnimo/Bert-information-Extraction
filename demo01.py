@@ -28,4 +28,25 @@ class OurTokenizer(Tokenizer):
 
 tokenizer = OurTokenizer(token_dict)
 
-print(tokenizer.tokenize('今天的  天气不错！'))
+from keras.layers import *
+from keras.models import Model
+import keras.backend as K
+from keras.callbacks import Callback
+from keras.optimizers import Adam
+
+def seq_gather(x):
+    # seq是[none,seq_len,s_size]的格式，idxs是[None,1]的格式
+    # 在seq的第i个序列中选出第i个向量，最终输出[None,s_size]的向量
+    seq,idxs = x
+    idxs = K.cast(idxs,'int32')
+    batch_idxs = K.arange(0,K.shape(seq)[0])
+    batch_idxs = K.expand_dims(batch_idxs,1)
+    idxs = K.concatenate([batch_idxs,idxs],1)
+    return K.tf.gather_nd(seq,idxs)
+
+bert_model = load_trained_model_from_checkpoint(config_path,checkpoint_path,seq_len=None)
+
+for l in bert_model.layers:
+    l.trainable = True
+
+t1_in = Input(shape=(None,))
