@@ -180,11 +180,11 @@ class data_generator:
                         O2 = seq_padding(O2, np.zeros(num_classes))
                         O3 = seq_padding(O3, np.zeros(num_classes))
                         O4 = seq_padding(O4, np.zeros(num_classes))
-                        K1, K2, K3, K4 = np.array(K1), np.array(K2), np.array(K3), np.array(K4)
+                        K1, K2 = np.array(K1), np.array(K2)
                         OK1, OK2 = np.array(OK1), np.array(OK2)
-                        yield [T1, T2, S1, S2, S3, S4, K1, K2, K3, K4, O1, O2, O3, O4, OK1, OK2], None
-                        T1, T2, S1, S2, S3, S4, K1, K2, K3, K4, O1, O2, O3, O4, OK1, OK2 = [], [], [], [], [], [], [], \
-                                                                                           [], [], [], [], [], [], [], [], []
+                        yield [T1, T2, S1, S2, S3, S4, K1, K2, O1, O2, O3, O4, OK1, OK2], None
+                        T1, T2, S1, S2, S3, S4, K1, K2, O1, O2, O3, O4, OK1, OK2 = [], [], [], [], [], [], [], \
+                                                                                           [], [], [], [], [], [], []
 
 
 # Bert预训练模型开始
@@ -221,8 +221,6 @@ s3_in = Input(shape=(None,))
 s4_in = Input(shape=(None,))
 k1_in = Input(shape=(1,))
 k2_in = Input(shape=(1,))
-k3_in = Input(shape=(1,))
-k4_in = Input(shape=(1,))
 o1_in = Input(shape=(None, num_classes))
 o2_in = Input(shape=(None, num_classes))
 o3_in = Input(shape=(None, num_classes))
@@ -230,7 +228,7 @@ o4_in = Input(shape=(None, num_classes))
 ok1_in = Input(shape=(1,))
 ok2_in = Input(shape=(1,))
 
-t1, t2, s1, s2, s3, s4, k1, k2, k3, k4, o1, o2, o3, o4 = t1_in, t2_in, s1_in, s2_in, s3_in, s4_in, k1_in, k2_in, k3_in, k4_in, o1_in, o2_in, o3_in, o4_in
+t1, t2, s1, s2, s3, s4, k1, k2, o1, o2, o3, o4 = t1_in, t2_in, s1_in, s2_in, s3_in, s4_in, k1_in, k2_in, o1_in, o2_in, o3_in, o4_in
 ok1, ok2 = ok1_in, ok2_in
 
 mask = Lambda(lambda x: K.cast(K.greater(K.expand_dims(x, 2), 0), 'float32'))(t1)
@@ -250,15 +248,11 @@ ps4 = Dense(1, activation='sigmoid')(t)
 
 subject2_model = Model([t1_in, t2_in, k1_in, k2_in], [ps3, ps4])
 
-k3v = Lambda(seq_gather)([t, k3])
-k4v = Lambda(seq_gather)([t, k4])
 
-kv = Average()([k3v, k4v])
-t = Add()([t, kv])
 po1 = Dense(num_classes, activation='sigmoid')(t)
 po2 = Dense(num_classes, activation='sigmoid')(t)
 
-object_model = Model([t1_in, t2_in, k1_in, k2_in, k3_in, k4_in], [po1, po2])
+object_model = Model([t1_in, t2_in, k1_in, k2_in], [po1, po2])
 
 ok3v = Lambda(seq_gather)([t, ok1])
 ok4v = Lambda(seq_gather)([t, ok2])
@@ -269,10 +263,10 @@ t = Add()([t, kv])
 po3 = Dense(num_classes, activation='sigmoid')(t)
 po4 = Dense(num_classes, activation='sigmoid')(t)
 
-object2_model = Model([t1_in, t2_in, k1_in, k2_in, k3_in, k4_in, ok1_in, ok2_in], [po3, po4])
+object2_model = Model([t1_in, t2_in, k1_in, k2_in, ok1_in, ok2_in], [po3, po4])
 
 train_model = Model(
-    [t1_in, t2_in, s1_in, s2_in, s3_in, s4_in, k1_in, k2_in, k3_in, k4_in, o1_in, o2_in, o3_in, o4_in, ok1_in, ok2_in],
+    [t1_in, t2_in, s1_in, s2_in, s3_in, s4_in, k1_in, k2_in, o1_in, o2_in, o3_in, o4_in, ok1_in, ok2_in],
     [ps1, ps2, ps3, ps4, po1, po2, po3, po4])
 
 s1 = K.expand_dims(s1, 2)
@@ -320,46 +314,52 @@ def extract_items(text_in):
             _subject = text_in[i - 1: j]
             _subjects.append((_subject, i, j))
     if _subjects:
-        _subject2s = []
+        _subjects2 = []
         _t1 = np.repeat(_t1, len(_subjects), 0)
         _t2 = np.repeat(_t2, len(_subjects), 0)
         _k1, _k2 = np.array([_s[1:] for _s in _subjects]).T.reshape((2, -1, 1))
         _k3, _k4 = subject2_model([_t1, _t2, _k1, _k2])
         for i, subject2 in enumerate(_subjects):
             _kk3, _kk4 = np.where(_k3[i] > 0.5)[0], np.where(_k4[i] > 0.4)[0]
-            for k_3 in _kk3:
-                for k_4 in _kk4:
-                    if k_3 <= k_4:
-                        _subject2 = text_in[k_3-1: k_4]
-                        _subject2s.append((_subject2, k_3, k_4))
-
-        if _subject2s:
-            _t1 = np.repeat(_t1, len(_subjects)+len(_subject2s), 0)
-            _t2 = np.repeat(_t2, len(_subjects)+len(_subject2s), 0)
-            _k3, _k4 = np.array([_s[1:] for _s in _subject2s]).T.reshape((2, -1, 1))
-            _o1, _o2 = object_model.predict([_t1, _t2, _k1, _k2, _k3, _k4])
-            for i, subject in enumerate(zip(_subjects, _subject2s)):
-                _oo1, _oo2 = np.where(_o1[i] > 0.5)[0], np.where(_o2[i] > 0.4)[0]
-                _objects = []
+            for _kkk3 in _kk3:
+                for _kkk4 in _kk4:
+                    if _kkk3 <= _kkk4:
+                        _ssubject = text_in[_kkk3-1: _kkk4]
+                        _subjects2.append(_ssubject)
+        if _subjects2:
+            _objects = []
+            _predicate = None
+            _o1, _o2 = object_model.predict([_t1, _t2, _k1, _k2])
+            for si, ssubject in enumerate(_subjects):
+                _oo1, _oo2 = np.where(_o1[si] > 0.5), np.where(_o2[si] > 0.4)
                 for _ooo1, _c1 in zip(*_oo1):
                     for _ooo2, _c2 in zip(*_oo2):
                         if _ooo1 <= _ooo2 and _c1 == _c2:
                             _object = text_in[_ooo1 - 1: _ooo2]
-                            _objects.append((_object, _ooo1, _ooo2))
+                            _predicate = id2predicate[_c2]
+                            _objects.append((ssubject, _subjects2[si], _object, _ooo1, _ooo2))
+            for i in _k1:
+                j = _k2[_k2 >= i]
+                if len(j) > 0:
+                    j = j[0]
                 if _objects:
-                    _t1 = np.repeat(_t1, len(_subject2s)+len(_subjects)+len(_objects), 0)
-                    _t2 = np.repeat(_t2, len(_subject2s)+len(_subjects)+len(_objects), 0)
-                    _ok1, _ok2 = np.array([_s[1:] for _s in _objects]).T.reshape((2, -1, 1))
-                    _o3, _o4 = object2_model.predict([_t1, _t2, _k1, _k2, _k3, _k4, _ok1, _ok2])
+                    _t1, _t2 = tokenizer.encode(first=text_in)
+                    _t1, _t2 = np.array([_t1]), np.array([_t2])
+                    _t1 = np.repeat(_t1, len(_objects), 0)
+                    _t2 = np.repeat(_t2, len(_objects), 0)
+                    _kk1 = np.repeat(i, len(_objects), 0)
+                    _kk2 = np.repeat(j, len(_objects), 0)
+                    _ok1, _ok2 = np.array([_s[3:] for _s in _objects]).T.reshape((2, -1, 1))
+                    _o3, _o4 = object2_model.predict([_t1, _t2, _kk1, _kk2, _ok1, _ok2])
                     for n, oobject in enumerate(_objects):
                         _oo3, _oo4 = np.where(_o3[n] > 0.5)[0], np.where(_o4[n] > 0.4)[0]
-                        for _ooo3, _c3 in zip(*_oo3):
-                            for _ooo4, _c4 in zip(*_oo4):
+                        for _ooo3, _c3 in _oo3:
+                            for _ooo4, _c4 in _oo4:
                                 if _ooo3 <= _ooo4 and _c3 == _c4:
                                     _object2 = text_in[_ooo3 - 1: _ooo4]
-                                    _predicate = id2predicate[_c3]
-                                    R.append((subject[0][0], subject[1][0], _predicate, oobject[0], _object2))
+                                    R.append((oobject[0], oobject[1], _predicate, oobject[2], _object2))
                                     break
+
         spo_list = set()
         for s, ss, p, o, oo in R:
             spo_list.add((s, ss, p, o, oo))
