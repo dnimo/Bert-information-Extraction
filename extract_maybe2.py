@@ -325,19 +325,24 @@ def extract_items(text_in):
                 for _kkk4 in _kk4:
                     if _kkk3 <= _kkk4:
                         _ssubject = text_in[_kkk3-1: _kkk4]
-                        _subjects2.append(_ssubject)
+                        _subjects2.append((subject2[0], _ssubject))
+                        break
+                break
+
         if _subjects2:
             _objects = []
             _predicate = None
             _o1, _o2 = object_model.predict([_t1, _t2, _k1, _k2])
-            for si, ssubject in enumerate(_subjects):
+            for si, ssubject in enumerate(_subjects2):
                 _oo1, _oo2 = np.where(_o1[si] > 0.5), np.where(_o2[si] > 0.4)
                 for _ooo1, _c1 in zip(*_oo1):
                     for _ooo2, _c2 in zip(*_oo2):
                         if _ooo1 <= _ooo2 and _c1 == _c2:
                             _object = text_in[_ooo1 - 1: _ooo2]
                             _predicate = id2predicate[_c2]
-                            _objects.append((ssubject, _subjects2[si], _object, _ooo1, _ooo2))
+                            _objects.append((ssubject[0], ssubject[1], _object, _ooo1, _ooo2))
+
+            # 随机采样
             for i in _k1:
                 j = _k2[_k2 >= i]
                 if len(j) > 0:
@@ -352,9 +357,9 @@ def extract_items(text_in):
                     _ok1, _ok2 = np.array([_s[3:] for _s in _objects]).T.reshape((2, -1, 1))
                     _o3, _o4 = object2_model.predict([_t1, _t2, _kk1, _kk2, _ok1, _ok2])
                     for n, oobject in enumerate(_objects):
-                        _oo3, _oo4 = np.where(_o3[n] > 0.5)[0], np.where(_o4[n] > 0.4)[0]
-                        for _ooo3, _c3 in _oo3:
-                            for _ooo4, _c4 in _oo4:
+                        _oo3, _oo4 = np.where(_o3[n] > 0.5), np.where(_o4[n] > 0.4)
+                        for _ooo3, _c3 in zip(*_oo3):
+                            for _ooo4, _c4 in zip(*_oo4):
                                 if _ooo3 <= _ooo4 and _c3 == _c4:
                                     _object2 = text_in[_ooo3 - 1: _ooo4]
                                     R.append((oobject[0], oobject[1], _predicate, oobject[2], _object2))
